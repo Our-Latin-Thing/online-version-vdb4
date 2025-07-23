@@ -1,74 +1,57 @@
-import logging
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from dotenv import load_dotenv
 from openai import OpenAI
-from pinecone.grpc import PineconeGRPC as Pinecone
+from pinecone.grpc import Pinecone
+from dotenv import load_dotenv
 import os
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# Load environment variables
 load_dotenv()
 
-# Initialize Flask app and CORS
+openai_api_key = os.getenv("OPENAI_API_KEY")
+pinecone_api_key = os.getenv("PINECONE_API_KEY")
+pinecone_index_name = os.getenv("PINECONE_INDEX")
+
+openai = OpenAI(api_key=openai_api_key)
+
+pinecone = Pinecone(api_key=pinecone_api_key)
+index = pinecone.Index(pinecone_index_name)
+
 app = Flask(__name__)
 CORS(app)
 
-# Initialize OpenAI client
-logger.info("Initializing OpenAI client...")
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-# Initialize Pinecone client
-logger.info("Initializing Pinecone client...")
-pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
-index = pc.Index(
-    os.getenv("PINECONE_INDEX_NAME"),
-    pool_threads=50
-)
-logger.info("Clients initialized successfully")
-
-# Test route
-@app.route("/api/test", methods=["GET"])
-def test():
-    return jsonify({"message": "API is working!"})
-
-# Search route
 @app.route("/api/search", methods=["POST"])
 def search():
-    data = request.json
+    data = request.get_json()
     query = data.get("query", "")
+
     if not query:
         return jsonify({"error": "Missing query"}), 400
 
-    # Generate embedding
-    response = client.embeddings.create(
+    # Embed the query using OpenAI
+    embedding_response = openai.embeddings.create(
         input=query,
         model="text-embedding-3-small"
     )
-    embed = response.data[0].embedding
+    embedding = embedding_response.data[0].embedding
 
-    # Query Pinecone
-    result = index.query(vector=embed, top_k=8, include_metadata=True)
+    # Query Pinecone index
+    pinecone_response = index.query(
+        vector=embedding,
+        top_k=8,
+        include_metadata=True
+    )
 
-    # Format matches with URL included
     matches = []
-    for match in result['matches']:
-        meta = match['metadata']
+    for match in pinecone_response.matches:
+        meta = match.metadata or {}
         matches.append({
             "title": meta.get("title", ""),
             "description": meta.get("text", ""),
             "tags": meta.get("tags", []),
             "address": meta.get("address", ""),
             "image_url": meta.get("image_url", ""),
-            "url": meta.get("url", ""),  # ✅ This line adds the URL to the response
-            "score": match.get("score", 0)
+            "url": meta.get("url", ""),  # ✅ Ensure frontend receives the URL
+            "score": match.score
         })
 
     return jsonify({"results": matches})
-
-# Start the Flask app
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
