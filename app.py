@@ -10,13 +10,18 @@ import os
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Load environment variables
 load_dotenv()
+
+# Initialize Flask app and CORS
 app = Flask(__name__)
 CORS(app)
 
+# Initialize OpenAI client
 logger.info("Initializing OpenAI client...")
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+# Initialize Pinecone client
 logger.info("Initializing Pinecone client...")
 pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
 index = pc.Index(
@@ -25,10 +30,12 @@ index = pc.Index(
 )
 logger.info("Clients initialized successfully")
 
+# Test route
 @app.route("/api/test", methods=["GET"])
 def test():
     return jsonify({"message": "API is working!"})
 
+# Search route
 @app.route("/api/search", methods=["POST"])
 def search():
     data = request.json
@@ -36,14 +43,17 @@ def search():
     if not query:
         return jsonify({"error": "Missing query"}), 400
 
+    # Generate embedding
     response = client.embeddings.create(
         input=query,
         model="text-embedding-3-small"
     )
     embed = response.data[0].embedding
 
+    # Query Pinecone
     result = index.query(vector=embed, top_k=8, include_metadata=True)
 
+    # Format matches with URL included
     matches = []
     for match in result['matches']:
         meta = match['metadata']
@@ -53,10 +63,12 @@ def search():
             "tags": meta.get("tags", []),
             "address": meta.get("address", ""),
             "image_url": meta.get("image_url", ""),
+            "url": meta.get("url", ""),  # ✅ This line adds the URL to the response
             "score": match.get("score", 0)
         })
 
     return jsonify({"results": matches})
 
+# Start the Flask app
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
