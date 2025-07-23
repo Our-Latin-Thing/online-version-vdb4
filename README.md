@@ -1,4 +1,4 @@
-# Boldmere Business Finder — Pinecone vdb4
+# Business Finder — Pinecone vdb4
 
 Duplicate of online-version (vdb3) with images displaying fixed
 
