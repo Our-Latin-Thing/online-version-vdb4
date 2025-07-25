@@ -53,6 +53,7 @@ def search():
             "tags": meta.get("tags", []),
             "address": meta.get("address", ""),
             "image_url": meta.get("image_url", ""),
+            "url": meta.get("url", ""),
             "score": match.get("score", 0)
         })
 
